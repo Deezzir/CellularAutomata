@@ -1,16 +1,33 @@
-use std::cmp::max;
 use std::io::{stdin, stdout, Write};
 use std::sync::mpsc;
 use std::time::Duration;
 use std::{fmt, thread};
+
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::{clear, cursor};
 
-const ROWS: usize = 20;
-const COLS: usize = 20;
+const APP_NAME: &str = "GoLrs";
+const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
+const BIN_NAME: Option<&str> = option_env!("CARGO_PKG_NAME");
+const DESCRIPTION: Option<&str> = option_env!("CARGO_PKG_DESCRIPTION");
+const AUTHORS: Option<&str> = option_env!("CARGO_PKG_AUTHORS");
+
+const HELP_TEMPLATE: &str = "\
+GoLrs ({version}) - {about-with-newline}
+{usage-heading} {usage}
+{all-args}
+{author-section}";
+
+const MAX_ROWS: u16 = 125;
+const MAX_COLS: u16 = 125;
+const MIN_ROWS: u16 = 10;
+const MIN_COLS: u16 = 10;
+const DEFAULT_ROWS: u16 = 20;
+const DEFAULT_COLS: u16 = 20;
 
 #[derive(Clone, PartialEq)]
 enum Cell {
@@ -35,10 +52,10 @@ struct Board {
 
 impl Board {
     fn new(rows: usize, cols: usize) -> Self {
-        let rows = max(rows, 10);
-        let cols = max(cols, 10);
+        let rows = rows.clamp(MIN_ROWS as usize, MAX_ROWS as usize);
+        let cols = cols.clamp(MIN_COLS as usize, MAX_COLS as usize);
 
-        let mut board = vec![vec![Cell::Dead; COLS]; ROWS];
+        let mut board = vec![vec![Cell::Dead; cols]; rows];
         // male a glider
         board[0][1] = Cell::Alive;
         board[1][2] = Cell::Alive;
@@ -63,21 +80,20 @@ impl Board {
                 }
             }
         }
-        return n;
+
+        n
     }
 
     fn next(&mut self) {
         let mut new_board = self.board.clone();
 
-        for row in 0..self.rows {
-            for col in 0..self.cols {
-                let n = self.count_n(row, col);
-                match self.board[row][col] {
-                    Cell::Dead => {
-                        new_board[row][col] = if n == 3 { Cell::Alive } else { Cell::Dead }
-                    }
+        for (ir, row) in new_board.iter_mut().enumerate() {
+            for (ic, item) in row.iter_mut().enumerate() {
+                let n = self.count_n(ir, ic);
+                match self.board[ir][ic] {
+                    Cell::Dead => *item = if n == 3 { Cell::Alive } else { Cell::Dead },
                     Cell::Alive => {
-                        new_board[row][col] = if (2..=3).contains(&n) {
+                        *item = if (2..=3).contains(&n) {
                             Cell::Alive
                         } else {
                             Cell::Dead
@@ -102,7 +118,7 @@ impl Board {
             writeln!(s, "▎").unwrap();
         }
 
-        writeln!(s, "{}", cursor::Goto(1, self.rows as u16 + 1)).unwrap();
+        write!(s, "{}", cursor::Goto(1, self.rows as u16 + 1)).unwrap();
         write!(s, " {} ", "▔".repeat(self.rows * 2).as_str()).unwrap();
     }
 }
@@ -117,6 +133,10 @@ fn rem_euclid(a: i32, b: i32) -> i32 {
 }
 
 fn main() {
+    let matches = get_args();
+    let cols = matches.get_one::<u16>("columns").unwrap_or(&DEFAULT_COLS);
+    let rows = matches.get_one::<u16>("rows").unwrap_or(&DEFAULT_ROWS);
+
     let mut stdout = stdout().into_raw_mode().unwrap();
     write!(stdout, "{}", cursor::Hide).unwrap();
 
@@ -130,7 +150,7 @@ fn main() {
     });
 
     let mut quit = false;
-    let mut board = Board::new(ROWS, COLS);
+    let mut board = Board::new(*rows as usize, *cols as usize);
 
     while !quit {
         board.render_board(&mut stdout);
@@ -154,4 +174,32 @@ fn main() {
         cursor::Show
     )
     .unwrap();
+}
+
+fn get_args() -> ArgMatches {
+    Command::new(APP_NAME)
+        .display_name(BIN_NAME.unwrap_or("Unknown"))
+        .author(AUTHORS.unwrap_or("Unknown"))
+        .about(DESCRIPTION.unwrap_or("Unknown"))
+        .version(VERSION.unwrap_or("Unknown"))
+        .help_template(HELP_TEMPLATE)
+        .arg(
+            Arg::new("columns")
+                .short('c')
+                .long("cols")
+                .value_name("num")
+                .action(ArgAction::Set)
+                .help("Number of columns in the board")
+                .value_parser(value_parser!(u16).range((MIN_COLS as i64)..=(MAX_COLS as i64))),
+        )
+        .arg(
+            Arg::new("rows")
+                .short('r')
+                .long("rows")
+                .value_name("num")
+                .action(ArgAction::Set)
+                .help("Number of rows in the board")
+                .value_parser(value_parser!(u16).range((MIN_ROWS as i64)..=(MAX_ROWS as i64))),
+        )
+        .get_matches()
 }

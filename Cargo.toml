@@ -1,6 +1,8 @@
 [package]
 name = "golrs"
-version = "0.1.0"
+authors = ["Iurii Kondrakov <deezzir@gmail.com>"]
+version = "1.0.0"
+description = "Interactive Game of Life in terminal"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
