@@ -133,6 +133,22 @@ impl Board {
         self.highlight_cursor(s);
     }
 
+    pub fn clear(&mut self) {
+        self.board = Self::new(self.board.len(), self.board[0].len()).board;
+    }
+
+    pub fn randomize(&mut self) {
+        for row in self.board.iter_mut() {
+            for item in row.iter_mut() {
+                *item = if rand::random() {
+                    Cell::Dead
+                } else {
+                    Cell::Alive
+                }
+            }
+        }
+    }
+
     fn highlight_cursor<W: Write>(&self, s: &mut W) {
         if self.render_mode == RenderMode::Ascii {
             let (c, r) = self.cursor;

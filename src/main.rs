@@ -35,15 +35,15 @@ const DEFAULT_COLS: u16 = 20;
 
 #[derive(PartialEq)]
 enum Mode {
-    Draw,
-    Pause,
+    Run,
+    Edit,
 }
 
 impl Mode {
     fn toggle(&mut self) {
         match self {
-            Mode::Draw => *self = Mode::Pause,
-            Mode::Pause => *self = Mode::Draw,
+            Mode::Run => *self = Mode::Edit,
+            Mode::Edit => *self = Mode::Run,
         }
     }
 }
@@ -67,36 +67,37 @@ fn main() {
     });
 
     let mut quit = false;
-    let mut mode = Mode::Draw;
+    let mut mode = Mode::Edit;
     let mut board = Board::new(*rows as usize, *cols as usize);
 
     while !quit {
         match mode {
-            Mode::Draw => {
+            Mode::Run => {
                 board.to_unicode_mode();
                 board.next_gen();
             }
-            Mode::Pause => {
+            Mode::Edit => {
                 board.to_ascii_mode();
             }
         }
-
+        
         board.render(&mut stdout);
         stdout.flush().unwrap();
 
         if let Ok(key) = rx.recv_timeout(timeout) {
             match key {
                 Key::Ctrl('c') | Key::Char('q') => quit = true,
-                Key::Char(' ') => mode.toggle(),
+                Key::Char('\n') => mode.toggle(),
                 key => {
-                    if mode == Mode::Pause {
+                    if mode == Mode::Edit {
                         match key {
-                            Key::Char('r') => board = Board::new(*rows as usize, *cols as usize),
+                            Key::Char('c') => board.clear(),
+                            Key::Char('r') => board.randomize(),
                             Key::Char('w') | Key::Up => board.move_cursor_up(),
                             Key::Char('s') | Key::Down => board.move_cursor_down(),
                             Key::Char('a') | Key::Left => board.move_cursor_left(),
                             Key::Char('d') | Key::Right => board.move_cursor_right(),
-                            Key::Char('\n') => board.toggle_cur_cell(),
+                            Key::Char(' ') => board.toggle_cur_cell(),
                             _ => {}
                         }
                     }
