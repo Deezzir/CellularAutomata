@@ -12,7 +12,7 @@ cargo run
 
 ## Optional Arguments
 
-```bash
+```
 GoLrs (1.0.0) - Interactive Game of Life in terminal
 
 Usage: golrs [OPTIONS]
