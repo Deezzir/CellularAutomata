@@ -1,23 +1,16 @@
-use std::io::Write;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+use sdl2::render::{Canvas, RenderTarget};
 
-use termion::style;
-use termion::{clear, color, cursor};
+use crate::RGBA_HEX;
 
-use crate::MAX_COLS;
-use crate::MAX_ROWS;
-use crate::MIN_COLS;
-use crate::MIN_ROWS;
-
-const HIGHLIGHT_PAIR: (&dyn color::Color, &dyn color::Color) = (&color::Black, &color::White);
+const MAX_ROWS: u16 = 125;
+const MAX_COLS: u16 = 125;
+const MIN_ROWS: u16 = 10;
+const MIN_COLS: u16 = 10;
 
 type Rows = usize;
 type Cols = usize;
-
-#[derive(Clone, Copy, PartialEq)]
-enum RenderMode {
-    Ascii,
-    Unicode,
-}
 
 #[derive(Clone, PartialEq)]
 enum Cell {
@@ -26,16 +19,10 @@ enum Cell {
 }
 
 impl Cell {
-    fn as_str(&self, mode: RenderMode) -> &str {
-        match mode {
-            RenderMode::Ascii => match self {
-                Cell::Alive => "@",
-                Cell::Dead => "-",
-            },
-            RenderMode::Unicode => match self {
-                Cell::Alive => "▢",
-                Cell::Dead => "■",
-            },
+    fn as_color_hex(&self) -> u32 {
+        match self {
+            Cell::Alive => 0xFFFFFFFF,
+            Cell::Dead => 0x000000FF,
         }
     }
 
@@ -49,7 +36,6 @@ impl Cell {
 
 pub struct Board {
     board: Vec<Vec<Cell>>,
-    render_mode: RenderMode,
     cursor: (Cols, Rows),
 }
 
@@ -60,7 +46,6 @@ impl Board {
 
         Self {
             board: vec![vec![Cell::Dead; cols]; rows],
-            render_mode: RenderMode::Ascii,
             cursor: (0, 0),
         }
     }
@@ -87,54 +72,29 @@ impl Board {
         self.board = new_board;
     }
 
-    pub fn to_ascii_mode(&mut self) {
-        self.render_mode = RenderMode::Ascii;
-    }
-
-    pub fn to_unicode_mode(&mut self) {
-        self.render_mode = RenderMode::Unicode;
-    }
-
-    pub fn move_cursor_left(&mut self) {
-        self.cursor.0 = self.cursor.0.saturating_sub(1);
-    }
-
-    pub fn move_cursor_right(&mut self) {
-        self.cursor.0 = (self.cursor.0 + 1).clamp(0, self.board[0].len() - 1);
-    }
-
-    pub fn move_cursor_up(&mut self) {
-        self.cursor.1 = self.cursor.1.saturating_sub(1);
-    }
-
-    pub fn move_cursor_down(&mut self) {
-        self.cursor.1 = (self.cursor.1 + 1).clamp(0, self.board.len() - 1);
-    }
-
     pub fn toggle_cur_cell(&mut self) {
         let (c, r) = self.cursor;
         self.board[r][c].toggle();
     }
 
-    pub fn render<W: Write>(&self, s: &mut W) {
-        write!(s, "{}{}", cursor::Goto(1, 1), clear::AfterCursor).unwrap();
-
-        for (ir, row) in self.board.iter().enumerate() {
-            write!(s, "{}", cursor::Goto(1, (ir + 1) as u16)).unwrap();
-
-            for (ic, item) in row.iter().enumerate() {
-                write!(s, "{}", if ic == 0 { " " } else { "" }).unwrap();
-                write!(s, "{}", item.as_str(self.render_mode)).unwrap();
-                write!(s, "{}", if ic < row.len() - 1 { " " } else { "" }).unwrap();
-            }
-            writeln!(s, "").unwrap();
-        }
-
-        self.highlight_cursor(s);
-    }
-
     pub fn clear(&mut self) {
         self.board = Self::new(self.board.len(), self.board[0].len()).board;
+    }
+
+    pub fn draw<T: RenderTarget>(&self, c: &mut Canvas<T>, width: u32, height: u32) {
+        let cell_h = height as i32 / self.board.len() as i32;
+        let cell_w = width as i32 / self.board[0].len() as i32;
+
+        for (ir, row) in self.board.iter().enumerate() {
+            for (ic, item) in row.iter().enumerate() {
+                let x = ic as i32 * cell_w;
+                let y = ir as i32 * cell_h;
+
+                let rect = Rect::new(x, y, cell_w as u32, cell_h as u32);
+                c.set_draw_color(RGBA_HEX!(item.as_color_hex()));
+                c.fill_rect(rect).unwrap();
+            }
+        }
     }
 
     pub fn randomize(&mut self) {
@@ -146,31 +106,6 @@ impl Board {
                     Cell::Alive
                 }
             }
-        }
-    }
-
-    fn highlight_cursor<W: Write>(&self, s: &mut W) {
-        if self.render_mode == RenderMode::Ascii {
-            let (c, r) = self.cursor;
-            let state = self.board[r][c].as_str(self.render_mode);
-
-            write!(
-                s,
-                "{}{}",
-                color::Fg(HIGHLIGHT_PAIR.0),
-                color::Bg(HIGHLIGHT_PAIR.1)
-            )
-            .unwrap();
-            write!(s, "{}[", cursor::Goto((c * 2 + 1) as u16, (r + 1) as u16)).unwrap();
-            write!(
-                s,
-                "{}{}",
-                cursor::Goto((c * 2 + 2) as u16, (r + 1) as u16),
-                state
-            )
-            .unwrap();
-            write!(s, "{}]", cursor::Goto((c * 2 + 3) as u16, (r + 1) as u16)).unwrap();
-            write!(s, "{}", style::Reset).unwrap();
         }
     }
 

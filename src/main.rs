@@ -1,145 +1,124 @@
 mod gol;
 
-use std::io::{stdin, stdout, Write};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
-
-use termion::event::Key;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
-use termion::{clear, cursor};
+use sdl2::event::{Event, WindowEvent};
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 
 use gol::*;
 
-const APP_NAME: &str = "GoLrs";
-const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
-const BIN_NAME: Option<&str> = option_env!("CARGO_PKG_NAME");
-const DESCRIPTION: Option<&str> = option_env!("CARGO_PKG_DESCRIPTION");
-const AUTHORS: Option<&str> = option_env!("CARGO_PKG_AUTHORS");
+const WINDOW_HEIGHT: u32 = 800;
+const WINDOW_WIDHT: u32 = 1000;
+const SCREEN_FPS: u32 = 60;
+const DELTA_TIME: f32 = 1.0 / SCREEN_FPS as f32;
+const RENDER_TIMEOUT: f32 = 0.2f32;
 
-const HELP_TEMPLATE: &str = "\
-GoLrs ({version}) - {about-with-newline}
-{usage-heading} {usage}
-{all-args}
-{author-section}";
+const ROWS: usize = 100;
+const COLS: usize = 100;
 
-const MAX_ROWS: u16 = 125;
-const MAX_COLS: u16 = 125;
-const MIN_ROWS: u16 = 10;
-const MIN_COLS: u16 = 10;
-const DEFAULT_ROWS: u16 = 20;
-const DEFAULT_COLS: u16 = 20;
-
-#[derive(PartialEq)]
-enum Mode {
-    Run,
-    Edit,
+#[macro_export]
+macro_rules! RGBA_HEX {
+    ($hex:expr) => {{
+        let r = (($hex >> 8 * 3) & 0xFF) as u8;
+        let g = (($hex >> 8 * 2) & 0xFF) as u8;
+        let b = (($hex >> 8 * 1) & 0xFF) as u8;
+        let a = (($hex >> 8 * 0) & 0xFF) as u8;
+        Color::RGBA(r, g, b, a)
+    }};
 }
 
-impl Mode {
-    fn toggle(&mut self) {
-        match self {
-            Mode::Run => *self = Mode::Edit,
-            Mode::Edit => *self = Mode::Run,
-        }
-    }
+fn sdl_error(err: String) -> String {
+    format!("[SDL ERROR]: {err}.")
 }
 
-fn main() {
-    let matches = get_args();
-    let cols = matches.get_one::<u16>("columns").unwrap_or(&DEFAULT_COLS);
-    let rows = matches.get_one::<u16>("rows").unwrap_or(&DEFAULT_ROWS);
+fn sdl_create_window(sdl_ctx: &sdl2::Sdl) -> Result<Window, String> {
+    let video_subsys = sdl_ctx.video().map_err(|err| sdl_error(err))?;
 
-    let mut stdout = stdout().into_raw_mode().unwrap();
-    write!(stdout, "{}", termion::cursor::Hide).unwrap();
-    stdout.flush().unwrap();
+    video_subsys
+        .window("GoLrs", WINDOW_WIDHT, WINDOW_HEIGHT)
+        .position_centered()
+        .resizable()
+        .allow_highdpi()
+        .build()
+        .map_err(|err| sdl_error(err.to_string()))
+}
 
-    let timeout = Duration::from_millis(100);
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let mut keys = stdin().keys();
-        while let Some(Ok(key)) = keys.next() {
-            tx.send(key).unwrap();
+fn sdl_create_canvas(window: Window) -> Result<Canvas<Window>, String> {
+    let mut canvas = window
+        .into_canvas()
+        .accelerated()
+        .present_vsync()
+        .build()
+        .map_err(|err| sdl_error(err.to_string()))?;
+
+    canvas
+        .set_logical_size(WINDOW_WIDHT, WINDOW_HEIGHT)
+        .map_err(|err| sdl_error(err.to_string()))?;
+
+    Ok(canvas)
+}
+
+fn main() -> Result<(), String> {
+    let sdl_context = sdl2::init().map_err(|err| sdl_error(err))?;
+    let window = sdl_create_window(&sdl_context)?;
+    let mut canvas = sdl_create_canvas(window)?;
+
+    canvas.set_draw_color(Color::BLACK);
+    canvas.clear();
+    canvas.present();
+
+    let mut board = Board::new(ROWS, COLS);
+    let mut pause = false;
+    let (mut width, mut height) = canvas.window().size();
+    let mut r_timeout = RENDER_TIMEOUT;
+
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    'running: loop {
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => break 'running,
+                Event::Window {
+                    win_event: WindowEvent::SizeChanged(w, h),
+                    ..
+                } => {
+                    width = w as u32;
+                    height = h as u32;
+                    canvas.set_viewport(Rect::new(0, 0, width, height));
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => board.randomize(),
+                Event::KeyDown {
+                    keycode: Some(Keycode::C),
+                    ..
+                } => board.clear(),
+                Event::KeyDown {
+                    keycode: Some(Keycode::Space),
+                    ..
+                } => pause = !pause,
+                _ => {}
+            }
         }
-    });
 
-    let mut quit = false;
-    let mut mode = Mode::Edit;
-    let mut board = Board::new(*rows as usize, *cols as usize);
-
-    while !quit {
-        match mode {
-            Mode::Run => {
-                board.to_unicode_mode();
+        if !pause {
+            r_timeout -= DELTA_TIME;
+            if r_timeout <= 0.0 {
+                r_timeout = RENDER_TIMEOUT;
                 board.next_gen();
             }
-            Mode::Edit => {
-                board.to_ascii_mode();
-            }
         }
-        
-        board.render(&mut stdout);
-        stdout.flush().unwrap();
 
-        if let Ok(key) = rx.recv_timeout(timeout) {
-            match key {
-                Key::Ctrl('c') | Key::Char('q') => quit = true,
-                Key::Char('\n') => mode.toggle(),
-                key => {
-                    if mode == Mode::Edit {
-                        match key {
-                            Key::Char('c') => board.clear(),
-                            Key::Char('r') => board.randomize(),
-                            Key::Char('w') | Key::Up => board.move_cursor_up(),
-                            Key::Char('s') | Key::Down => board.move_cursor_down(),
-                            Key::Char('a') | Key::Left => board.move_cursor_left(),
-                            Key::Char('d') | Key::Right => board.move_cursor_right(),
-                            Key::Char(' ') => board.toggle_cur_cell(),
-                            _ => {}
-                        }
-                    }
-                }
-            }
-        }
+        canvas.clear();
+        board.draw(&mut canvas, width, height);
+        canvas.present();
     }
 
-    write!(
-        stdout,
-        "{}{}{}",
-        cursor::Goto(1, 1),
-        clear::All,
-        cursor::Show
-    )
-    .unwrap();
-}
-
-fn get_args() -> ArgMatches {
-    Command::new(APP_NAME)
-        .display_name(BIN_NAME.unwrap_or("Unknown"))
-        .author(AUTHORS.unwrap_or("Unknown"))
-        .about(DESCRIPTION.unwrap_or("Unknown"))
-        .version(VERSION.unwrap_or("Unknown"))
-        .help_template(HELP_TEMPLATE)
-        .arg(
-            Arg::new("columns")
-                .short('c')
-                .long("cols")
-                .value_name("num")
-                .action(ArgAction::Set)
-                .help("Number of columns in the board")
-                .value_parser(value_parser!(u16).range((MIN_COLS as i64)..=(MAX_COLS as i64))),
-        )
-        .arg(
-            Arg::new("rows")
-                .short('r')
-                .long("rows")
-                .value_name("num")
-                .action(ArgAction::Set)
-                .help("Number of rows in the board")
-                .value_parser(value_parser!(u16).range((MIN_ROWS as i64)..=(MAX_ROWS as i64))),
-        )
-        .get_matches()
+    Ok(())
 }
