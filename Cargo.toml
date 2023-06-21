@@ -1,13 +1,30 @@
 [package]
-name = "golrs"
+name = "cellular_automata"
 authors = ["Iurii Kondrakov <deezzir@gmail.com>"]
 version = "1.0.0"
-description = "Interactive Game of Life in terminal"
+description = "Cellular Automata in Raylib/Terminal"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+default-run = "gol_gui"
 
 [dependencies]
 termion = "2.0.1"
+raylib = "3.7.0"
 clap = "4.1.1"
+sdl2 = "0.35.2"
 rand = "0.8.5"
+
+[[bin]]
+name = "gol_term"
+path = "src/gol_term.rs"
+
+[[bin]]
+name = "gol_gui"
+path = "src/gol_gui.rs"
+
+[[bin]]
+name = "smoothlife_term"
+path = "src/smoothlife_term.rs"
+
+[[bin]]
+name = "smoothlife_gui"
+path = "src/smoothlife_gui.rs"
