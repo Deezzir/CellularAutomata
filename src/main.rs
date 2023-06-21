@@ -1,4 +1,4 @@
-mod gol;
+mod cautomata;
 
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Keycode;
@@ -7,7 +7,8 @@ use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 
-use gol::*;
+use cautomata::board::*;
+use cautomata::gol::*;
 
 const WINDOW_HEIGHT: u32 = 800;
 const WINDOW_WIDHT: u32 = 1000;
@@ -69,7 +70,7 @@ fn main() -> Result<(), String> {
     canvas.clear();
     canvas.present();
 
-    let mut board = Board::new(ROWS, COLS);
+    let mut board = GoL::new(ROWS, COLS);
     let mut pause = false;
     let (mut width, mut height) = canvas.window().size();
     let mut r_timeout = RENDER_TIMEOUT;
@@ -109,10 +110,11 @@ fn main() -> Result<(), String> {
 
         if !pause {
             r_timeout -= DELTA_TIME;
-            if r_timeout <= 0.0 {
-                r_timeout = RENDER_TIMEOUT;
-                board.next_gen();
-            }
+        }
+
+        if r_timeout <= 0.0 {
+            r_timeout = RENDER_TIMEOUT;
+            board.next_gen();
         }
 
         canvas.clear();

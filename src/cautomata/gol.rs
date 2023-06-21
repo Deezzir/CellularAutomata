@@ -2,6 +2,7 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::{Canvas, RenderTarget};
 
+use super::board::Board;
 use crate::RGBA_HEX;
 
 const MAX_ROWS: u16 = 125;
@@ -26,31 +27,29 @@ impl Cell {
         }
     }
 
-    fn toggle(&mut self) {
-        match self {
-            Cell::Alive => *self = Cell::Dead,
-            Cell::Dead => *self = Cell::Alive,
-        }
-    }
+    // fn toggle(&mut self) {
+    //     match self {
+    //         Cell::Alive => *self = Cell::Dead,
+    //         Cell::Dead => *self = Cell::Alive,
+    //     }
+    // }
 }
 
-pub struct Board {
+pub struct GoL {
     board: Vec<Vec<Cell>>,
-    cursor: (Cols, Rows),
 }
 
-impl Board {
-    pub fn new(rows: Rows, cols: Cols) -> Self {
+impl Board for GoL {
+    fn new(rows: Rows, cols: Cols) -> Self {
         let rows = rows.clamp(MIN_ROWS as usize, MAX_ROWS as usize);
         let cols = cols.clamp(MIN_COLS as usize, MAX_COLS as usize);
 
         Self {
             board: vec![vec![Cell::Dead; cols]; rows],
-            cursor: (0, 0),
         }
     }
 
-    pub fn next_gen(&mut self) {
+    fn next_gen(&mut self) {
         let mut new_board = self.board.clone();
 
         for (ir, row) in new_board.iter_mut().enumerate() {
@@ -72,16 +71,11 @@ impl Board {
         self.board = new_board;
     }
 
-    pub fn toggle_cur_cell(&mut self) {
-        let (c, r) = self.cursor;
-        self.board[r][c].toggle();
-    }
-
-    pub fn clear(&mut self) {
+    fn clear(&mut self) {
         self.board = Self::new(self.board.len(), self.board[0].len()).board;
     }
 
-    pub fn draw<T: RenderTarget>(&self, c: &mut Canvas<T>, width: u32, height: u32) {
+    fn draw<T: RenderTarget>(&self, c: &mut Canvas<T>, width: u32, height: u32) {
         let cell_h = height as i32 / self.board.len() as i32;
         let cell_w = width as i32 / self.board[0].len() as i32;
 
@@ -97,7 +91,7 @@ impl Board {
         }
     }
 
-    pub fn randomize(&mut self) {
+    fn randomize(&mut self) {
         for row in self.board.iter_mut() {
             for item in row.iter_mut() {
                 *item = if rand::random() {
@@ -108,7 +102,9 @@ impl Board {
             }
         }
     }
+}
 
+impl GoL {
     fn count_n(&self, row: Rows, col: Cols) -> usize {
         let mut n: usize = 0;
 
